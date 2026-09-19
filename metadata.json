@@ -1,0 +1,6 @@
+{
+  "name": "ORAX-HOSTING",
+  "description": "Plateforme web PaaS d'hébergement et de déploiement de bots 24h/24 (WhatsApp Pairing Code, Telegram, Node.js, Python) avec serveurs dédiés.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

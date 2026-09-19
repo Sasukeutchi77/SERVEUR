@@ -1,0 +1,38 @@
+# ==============================================================================
+# DOCKERFILE: SERVEUR DE CONTRÔLE BOTCLOUD PAAS
+# ==============================================================================
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Installation des dépendances de compilation
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# Build du frontend Vite et du serveur de contrôle Express
+RUN npm run build
+
+# Stage de production minimal
+FROM node:22-alpine AS runner
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Installation du client Docker CLI pour communiquer avec le daemon de l'hôte
+RUN apk add --no-cache docker-cli
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY --from=builder /app/dist ./dist
+
+# Création des dossiers de données persistantes
+RUN mkdir -p /app/data/workspaces /app/data/volumes /app/data/logs
+
+EXPOSE 3000
+
+CMD ["node", "dist/server.cjs"]

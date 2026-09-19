@@ -1,0 +1,95 @@
+services:
+  # ============================================================================
+  # 1. BASE DE DONNÉES RELATIONNELLE (PostgreSQL 16)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: botcloud_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: botcloud_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-botcloud_secure_password}
+      POSTGRES_DB: botcloud_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - botcloud_internal_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U botcloud_user -d botcloud_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # 2. CACHE & QUEUE DISTRIBUÉE (Redis 7)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: botcloud_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-botcloud_redis_secret}
+    volumes:
+      - redis_data:/data
+    networks:
+      - botcloud_internal_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # 3. CONTROL PLANE (Backend API + Frontend Dashboard)
+  # ============================================================================
+  botcloud-server:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.server
+    container_name: botcloud_server
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://botcloud_user:${DB_PASSWORD:-botcloud_secure_password}@postgres:5432/botcloud_db?schema=public
+      REDIS_URL: redis://:${REDIS_PASSWORD:-botcloud_redis_secret}@redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change_in_production_with_strong_secret}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      WORKSPACE_STORAGE_PATH: /app/data/workspaces
+      PERSISTENT_VOLUMES_PATH: /app/data/volumes
+      LOGS_STORAGE_PATH: /app/data/logs
+    volumes:
+      - workspaces_data:/app/data/workspaces
+      - bot_volumes_data:/app/data/volumes
+      - logs_data:/app/data/logs
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - botcloud_internal_net
+      - botcloud_bots_net
+
+# ============================================================================
+# RÉSEAUX ISOLÉS
+# ============================================================================
+networks:
+  # Réseau interne privé pour l'infrastructure (Serveur, PostgreSQL, Redis)
+  botcloud_internal_net:
+    driver: bridge
+  # Réseau isolé pour les conteneurs de bots utilisateurs (interdisant l'accès aux BDD internes)
+  botcloud_bots_net:
+    driver: bridge
+
+# ============================================================================
+# VOLUMES DE STOCKAGE PERSISTANT
+# ============================================================================
+volumes:
+  postgres_data:
+  redis_data:
+  workspaces_data:
+  bot_volumes_data:
+  logs_data:
