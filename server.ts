@@ -634,24 +634,44 @@ app.post("/api/v1/test/phase1", (_req, res) => {
 // ============================================================================
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  const isProduction =
+    process.env.NODE_ENV === "production" ||
+    (typeof __filename !== "undefined" && __filename.includes("dist"));
+
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), "dist");
+    // En production, localise le dossier dist de manière résiliente
+    const distPath = fs.existsSync(path.join(process.cwd(), "dist", "index.html"))
+      ? path.join(process.cwd(), "dist")
+      : typeof __dirname !== "undefined" && fs.existsSync(path.join(__dirname, "index.html"))
+      ? __dirname
+      : path.join(process.cwd(), "dist");
+
     if (fs.existsSync(distPath)) {
       app.use(express.static(distPath));
       app.get("*", (_req, res) => {
-        res.sendFile(path.join(distPath, "index.html"));
+        const indexFile = path.join(distPath, "index.html");
+        if (fs.existsSync(indexFile)) {
+          res.sendFile(indexFile);
+        } else {
+          res.status(404).send("Fichier index.html introuvable dans dist/. Exécutez 'npm run build'.");
+        }
+      });
+    } else {
+      console.warn(`[BotCloud PaaS] Attention: Répertoire de build statique introuvable à ${distPath}`);
+      app.get("*", (_req, res) => {
+        res.status(503).send("L'application n'est pas encore compilée. Exécutez 'npm run build'.");
       });
     }
   }
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`[BotCloud PaaS] Control Plane API démarré sur http://0.0.0.0:${PORT}`);
+    console.log(`[BotCloud PaaS] Control Plane API démarré sur http://0.0.0.0:${PORT} (Mode: ${isProduction ? 'Production' : 'Development'})`);
   });
 }
 
