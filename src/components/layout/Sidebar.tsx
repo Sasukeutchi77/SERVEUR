@@ -8,7 +8,10 @@ import {
   X,
   Layers,
   Radio,
-  CreditCard
+  CreditCard,
+  LogIn,
+  LogOut,
+  User
 } from 'lucide-react';
 
 export type NavigationTab = 
@@ -33,6 +36,12 @@ interface SidebarProps {
   onCloseMobile: () => void;
   runningBotsCount?: number;
   totalBotsCount?: number;
+  currentUser?: {
+    email: string | null;
+    displayName?: string | null;
+  } | null;
+  onOpenAuthModal?: () => void;
+  onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,6 +51,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   runningBotsCount = 2,
   totalBotsCount = 4,
+  currentUser,
+  onOpenAuthModal,
+  onLogout,
 }) => {
   const normalizedTab = 
     activeTab === 'bots' || activeTab === 'overview' || activeTab === 'deployments' || activeTab === 'logs' ? 'servers' :
@@ -192,8 +204,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         </div>
 
-        {/* Pied de la barre latérale */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950/40">
+        {/* Pied de la barre latérale & Profil utilisateur */}
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/40 space-y-2.5">
+          {currentUser ? (
+            <div className="flex items-center justify-between p-2 rounded-xl bg-indigo-950/40 border border-indigo-800/40 text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                  {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : currentUser.email ? currentUser.email[0].toUpperCase() : 'U'}
+                </div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-200 truncate text-[11px]">
+                    {currentUser.displayName || currentUser.email?.split('@')[0]}
+                  </div>
+                  <div className="text-[9px] font-mono text-emerald-400 truncate">
+                    ● Connecté
+                  </div>
+                </div>
+              </div>
+              {onLogout && (
+                <button
+                  onClick={onLogout}
+                  title="Déconnexion"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            onOpenAuthModal && (
+              <button
+                onClick={() => {
+                  onCloseMobile();
+                  onOpenAuthModal();
+                }}
+                className="w-full flex items-center justify-center gap-2 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold transition-all cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Connexion par Email</span>
+              </button>
+            )
+          )}
+
           <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-slate-800/60 text-xs">
             <div className="flex items-center space-x-2.5">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

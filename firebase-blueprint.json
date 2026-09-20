@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Utilisateur enregistré sur ORAX-HOSTING",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "walletBalanceCfa": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "Server": {
+      "title": "Server",
+      "description": "Instance de bot hébergée",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "runtime": { "type": "string" },
+        "status": { "type": "string" },
+        "planId": { "type": "string" },
+        "planName": { "type": "string" },
+        "monthlyPriceCfa": { "type": "number" },
+        "expiresAt": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "name", "runtime", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "entity": "User",
+      "description": "Profil utilisateur et solde du portefeuille CFA"
+    },
+    "/users/{userId}/servers/{serverId}": {
+      "entity": "Server",
+      "description": "Serveurs appartenant à l'utilisateur"
+    }
+  }
+}

@@ -15,6 +15,13 @@ import { RuntimeExplorer } from './components/RuntimeExplorer.tsx';
 import { RoadmapPhases } from './components/RoadmapPhases.tsx';
 
 import { ToastProvider, useToast } from './components/ui/Toast.tsx';
+import { AuthModal } from './components/auth/AuthModal.tsx';
+import { 
+  subscribeToAuth, 
+  logoutUser, 
+  getUserProfile, 
+  updateUserWalletBalance 
+} from './lib/firebase.ts';
 import { INITIAL_COMPONENTS, INITIAL_RUNTIMES } from './data/initialData.ts';
 import { SERVER_PLANS, ServerPlan, calculateExpirationDate, formatPrice } from './data/serverPlans.ts';
 import type { ArchitectureComponentStatus, RuntimeConfig } from '../shared/types/index.ts';
@@ -183,6 +190,54 @@ function AppContent() {
   const [purchaseModalOpen, setPurchaseModalOpen] = useState<boolean>(false);
   const [purchaseInitialPlanId, setPurchaseInitialPlanId] = useState<string>('standard-2.5');
   const [renewTargetServer, setRenewTargetServer] = useState<ServerItem | null>(null);
+
+  // Authentification Firebase (Email & Mot de passe)
+  const [currentUser, setCurrentUser] = useState<{
+    uid: string;
+    email: string | null;
+    displayName: string | null;
+  } | null>(null);
+  const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
+
+  // Abonnement à l'état Firebase Auth
+  useEffect(() => {
+    const unsubscribe = subscribeToAuth(async (user) => {
+      if (user) {
+        setCurrentUser({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName
+        });
+
+        // Synchroniser le profil et le solde depuis Firestore
+        const profile = await getUserProfile(user.uid);
+        if (profile && typeof profile.walletBalanceCfa === 'number') {
+          setWalletBalanceCfa(profile.walletBalanceCfa);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      showToast('info', 'Déconnexion réussie', 'Vous naviguez désormais en mode invité.');
+    } catch (err: any) {
+      showToast('error', 'Erreur de déconnexion', err?.message || 'Impossible de se déconnecter.');
+    }
+  };
+
+  const handleAuthSuccess = (email: string, isNewUser: boolean) => {
+    showToast(
+      'success',
+      isNewUser ? 'Compte ORAX créé !' : 'Bon retour parmi nous !',
+      `Connecté sous ${email}. Vos serveurs et solde sont sécurisés sur Firebase.`
+    );
+  };
 
   useEffect(() => {
     const checkSystem = async () => {
@@ -385,6 +440,9 @@ function AppContent() {
         onCloseMobile={() => setMobileMenuOpen(false)}
         runningBotsCount={runningServersCount}
         totalBotsCount={servers.length}
+        currentUser={currentUser}
+        onOpenAuthModal={() => setAuthModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* 2. Zone principale */}
@@ -401,6 +459,9 @@ function AppContent() {
           }}
           uptimeSeconds={uptime}
           serverReady={serverReady}
+          currentUser={currentUser}
+          onOpenAuthModal={() => setAuthModalOpen(true)}
+          onLogout={handleLogout}
         />
 
         {/* Contenu principal spacieux & aéré */}
@@ -455,7 +516,13 @@ function AppContent() {
               servers={servers}
               walletBalanceCfa={walletBalanceCfa}
               onRechargeWallet={(amount) => {
-                setWalletBalanceCfa((prev) => prev + amount);
+                setWalletBalanceCfa((prev) => {
+                  const newBal = prev + amount;
+                  if (currentUser) {
+                    updateUserWalletBalance(currentUser.uid, newBal);
+                  }
+                  return newBal;
+                });
                 showToast('success', 'Solde Rechargé !', `+${formatPrice(amount)} ajoutés avec succès à votre portefeuille ORAX-HOSTING.`);
               }}
               onOpenPurchaseModal={(planId) => {
@@ -538,6 +605,13 @@ function AppContent() {
           onSuccessRenew={handleRenewSuccess}
         />
       )}
+
+      {/* MODALE AUTHENTIFICATION FIREBASE (EMAIL & MOT DE PASSE) */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onSuccessAuth={handleAuthSuccess}
+      />
 
     </div>
   );
