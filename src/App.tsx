@@ -16,11 +16,10 @@ import { RoadmapPhases } from './components/RoadmapPhases.tsx';
 
 import { ToastProvider, useToast } from './components/ui/Toast.tsx';
 import { AuthModal } from './components/auth/AuthModal.tsx';
-import { 
-  subscribeToAuth, 
-  logoutUser, 
-  getUserProfile, 
-  updateUserWalletBalance 
+import {
+  subscribeToAuth,
+  logoutUser,
+  getUserProfile,
 } from './lib/firebase.ts';
 import { INITIAL_COMPONENTS, INITIAL_RUNTIMES } from './data/initialData.ts';
 import { SERVER_PLANS, ServerPlan, calculateExpirationDate, formatPrice } from './data/serverPlans.ts';
@@ -179,19 +178,14 @@ function AppContent() {
   const [components, setComponents] = useState<ArchitectureComponentStatus[]>(INITIAL_COMPONENTS);
   const [runtimes, setRuntimes] = useState<RuntimeConfig[]>(INITIAL_RUNTIMES);
 
-  // Liste des serveurs
   const [servers, setServers] = useState<ServerItem[]>(INITIAL_SERVERS);
-  
-  // Serveur actuellement ouvert (quand l'utilisateur clique dessus)
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
 
-  // État de facturation & monétisation (VPS en FCFA)
-  const [walletBalanceCfa, setWalletBalanceCfa] = useState<number>(3300);
+  const [walletBalanceCfa, setWalletBalanceCfa] = useState<number>(0);
   const [purchaseModalOpen, setPurchaseModalOpen] = useState<boolean>(false);
   const [purchaseInitialPlanId, setPurchaseInitialPlanId] = useState<string>('standard-2.5');
   const [renewTargetServer, setRenewTargetServer] = useState<ServerItem | null>(null);
 
-  // Authentification Firebase (Email & Mot de passe)
   const [currentUser, setCurrentUser] = useState<{
     uid: string;
     email: string | null;
@@ -199,20 +193,18 @@ function AppContent() {
   } | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState<boolean>(false);
 
-  // Abonnement à l'état Firebase Auth
   useEffect(() => {
     const unsubscribe = subscribeToAuth(async (user) => {
       if (user) {
         setCurrentUser({
           uid: user.uid,
           email: user.email,
-          displayName: user.displayName
+          displayName: user.displayName,
         });
 
-        // Synchroniser le profil et le solde depuis Firestore
         const profile = await getUserProfile(user.uid);
         if (profile && typeof profile.walletBalanceCfa === 'number') {
-          setWalletBalanceCfa(profile.walletBalanceCfa);
+          setWalletBalanceCfa(0);
         }
       } else {
         setCurrentUser(null);
@@ -235,7 +227,7 @@ function AppContent() {
     showToast(
       'success',
       isNewUser ? 'Compte ORAX créé !' : 'Bon retour parmi nous !',
-      `Connecté sous ${email}. Vos serveurs et solde sont sécurisés sur Firebase.`
+      `Connecté sous ${email}. Vos serveurs sont sécurisés.`
     );
   };
 
@@ -244,7 +236,7 @@ function AppContent() {
       try {
         const [healthRes, overviewRes] = await Promise.all([
           fetch('/api/health'),
-          fetch('/api/v1/system/overview')
+          fetch('/api/v1/system/overview'),
         ]);
 
         if (healthRes.ok) {
@@ -293,19 +285,19 @@ function AppContent() {
       volume: '/app/session',
       files: [],
       logs: [
-        { 
-          id: '1', 
-          timestamp: new Date().toLocaleTimeString(), 
-          level: 'SYSTEM', 
-          message: `<<<[ORAX-HOSTING]>>> Serveur ${name} créé avec succès. Ouvrez l'onglet "Files" pour téléverser votre archive ZIP.`, 
-          source: 'system' 
+        {
+          id: '1',
+          timestamp: new Date().toLocaleTimeString(),
+          level: 'SYSTEM',
+          message: `<<<[ORAX-HOSTING]>>> Serveur ${name} créé avec succès. Ouvrez l'onglet "Files" pour téléverser votre archive ZIP.`,
+          source: 'system',
         },
-        { 
-          id: '2', 
-          timestamp: new Date().toLocaleTimeString(), 
-          level: 'SYSTEM', 
-          message: '<<<[ORAX-HOSTING]>>> Server marked as offline...', 
-          source: 'system' 
+        {
+          id: '2',
+          timestamp: new Date().toLocaleTimeString(),
+          level: 'SYSTEM',
+          message: '<<<[ORAX-HOSTING]>>> Server marked as offline...',
+          source: 'system',
         },
       ],
     };
@@ -355,23 +347,23 @@ function AppContent() {
           timestamp: new Date().toLocaleTimeString(),
           level: 'SYSTEM',
           message: `<<<[ORAX-HOSTING]>>> Serveur "${newServerData.serverName}" provisionné sous la formule ${newServerData.plan.name} (Validité: 30 jours / 1 mois).`,
-          source: 'system'
+          source: 'system',
         },
         {
           id: '2',
           timestamp: new Date().toLocaleTimeString(),
           level: 'INFO',
           message: `Specs VPS allouées : ${newServerData.plan.cpuCores} vCPU, ${newServerData.plan.ramMb} MB RAM, ${newServerData.plan.diskGb} GB SSD NVMe.`,
-          source: 'system'
+          source: 'system',
         },
         {
           id: '3',
           timestamp: new Date().toLocaleTimeString(),
           level: 'INFO',
           message: `Téléversez votre archive bot ZIP dans l'onglet "Files" pour lancer vos automatisations Baileys ou Python 24h/24.`,
-          source: 'system'
-        }
-      ]
+          source: 'system',
+        },
+      ],
     };
 
     setServers((prev) => [...prev, newServer]);
@@ -424,8 +416,6 @@ function AppContent() {
 
   return (
     <div id="orax-hosting-root" className="min-h-screen bg-[#07090e] text-slate-100 flex font-sans selection:bg-indigo-600 selection:text-white bg-tech-grid">
-      
-      {/* 1. Barre latérale ORAX-HOSTING */}
       <Sidebar
         activeTab={activeTab}
         onSelectTab={(tab) => {
@@ -445,10 +435,7 @@ function AppContent() {
         onLogout={handleLogout}
       />
 
-      {/* 2. Zone principale */}
       <div className="flex-1 flex flex-col min-w-0 lg:pl-64">
-        
-        {/* Barre supérieure contextuelle */}
         <Topbar
           activeTab={activeTab}
           selectedServerName={currentSelectedServer ? currentSelectedServer.name : undefined}
@@ -464,13 +451,9 @@ function AppContent() {
           onLogout={handleLogout}
         />
 
-        {/* Contenu principal spacieux & aéré */}
         <main className="flex-1 p-4 sm:p-7 lg:p-9 max-w-7xl w-full mx-auto">
-          
-          {/* Si on est sur l'onglet Serveurs */}
           {(activeTab === 'servers' || activeTab === 'bots' || activeTab === 'overview' || activeTab === 'deployments' || activeTab === 'logs') && (
             selectedServerId && currentSelectedServer ? (
-              /* DÉTAIL DU SERVEUR (Console, Files, START/RESTART/STOP, etc.) */
               <ServerDetailView
                 server={currentSelectedServer}
                 onBack={() => setSelectedServerId(null)}
@@ -478,7 +461,6 @@ function AppContent() {
                 onDeleteServer={handleDeleteServer}
               />
             ) : (
-              /* LISTE VERTICALE DES SERVEURS */
               <ServersVerticalListView
                 servers={servers}
                 onSelectServer={handleSelectServer}
@@ -493,7 +475,6 @@ function AppContent() {
             )
           )}
 
-          {/* Si l'utilisateur clique sur "+ Créer un Serveur" dans la sidebar */}
           {activeTab === 'new-server' && (
             <div className="max-w-4xl mx-auto space-y-6">
               <ServersVerticalListView
@@ -510,20 +491,12 @@ function AppContent() {
             </div>
           )}
 
-          {/* NOUVEL ONGLET : Tarifs & Abonnements VPS (Monétisation en FCFA) */}
           {activeTab === 'billing' && (
             <BillingPlansView
               servers={servers}
               walletBalanceCfa={walletBalanceCfa}
-              onRechargeWallet={(amount) => {
-                setWalletBalanceCfa((prev) => {
-                  const newBal = prev + amount;
-                  if (currentUser) {
-                    updateUserWalletBalance(currentUser.uid, newBal);
-                  }
-                  return newBal;
-                });
-                showToast('success', 'Solde Rechargé !', `+${formatPrice(amount)} ajoutés avec succès à votre portefeuille ORAX-HOSTING.`);
+              onRechargeWallet={() => {
+                showToast('info', 'Paiement désactivé', 'Le système de paiement est actuellement désactivé tant qu\'un fournisseur vérifiable n\'est configuré.');
               }}
               onOpenPurchaseModal={(planId) => {
                 setPurchaseInitialPlanId(planId || 'standard-2.5');
@@ -542,12 +515,10 @@ function AppContent() {
             />
           )}
 
-          {/* Onglet Santé & Ressources */}
           {(activeTab === 'resources' || activeTab === 'activity' || activeTab === 'settings') && (
             <SystemResourcesView />
           )}
 
-          {/* Onglet Architecture & Spécifications */}
           {activeTab === 'docs' && (
             <div className="space-y-7">
               <div className="p-5 rounded-2xl bg-slate-900/70 border border-slate-800">
@@ -565,10 +536,8 @@ function AppContent() {
               <RoadmapPhases />
             </div>
           )}
-
         </main>
 
-        {/* Pied de page ORAX-HOSTING */}
         <footer className="border-t border-slate-800/80 bg-slate-950/80 px-4 sm:px-8 py-3 text-xs text-slate-500 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-mono text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-400" />
@@ -578,10 +547,8 @@ function AppContent() {
             Serveurs dédiés 24h/24 • Pairing Code WhatsApp & Telegram • Fichiers & Consoles isolées
           </div>
         </footer>
-
       </div>
 
-      {/* MODALE D'ACHAT DE SERVEUR (1 MOIS / 30 JOURS) */}
       {purchaseModalOpen && (
         <ServerPurchaseModal
           isOpen={purchaseModalOpen}
@@ -592,7 +559,6 @@ function AppContent() {
         />
       )}
 
-      {/* MODALE DE RENOUVELLEMENT DE SERVEUR (1 MOIS / 30 JOURS) */}
       {renewTargetServer && (
         <ServerRenewModal
           isOpen={!!renewTargetServer}
@@ -606,13 +572,11 @@ function AppContent() {
         />
       )}
 
-      {/* MODALE AUTHENTIFICATION FIREBASE (EMAIL & MOT DE PASSE) */}
       <AuthModal
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         onSuccessAuth={handleAuthSuccess}
       />
-
     </div>
   );
 }
