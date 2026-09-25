@@ -1,33 +1,50 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isAuthenticated() {
+    function signedIn() {
       return request.auth != null;
     }
-    
+
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return signedIn() && request.auth.uid == userId;
     }
 
-    // User document and personal data
+    function unchanged(field) {
+      return !(field in request.resource.data) ||
+        request.resource.data[field] == resource.data[field];
+    }
+
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      allow create: if isOwner(userId)
+        && request.resource.data.uid == userId
+        && request.resource.data.walletBalanceCfa == 0
+        && request.resource.data.keys().hasOnly([
+          'uid', 'email', 'displayName', 'createdAt', 'updatedAt',
+          'walletBalanceCfa'
+        ]);
+      allow get: if isOwner(userId);
+      allow update: if isOwner(userId)
+        && unchanged('uid')
+        && unchanged('email')
+        && unchanged('createdAt')
+        && unchanged('walletBalanceCfa')
+        && unchanged('role');
+      allow delete: if false;
 
-      // User's servers subcollection
       match /servers/{serverId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwner(userId);
+        allow write: if false;
       }
 
-      // User's payments subcollection
       match /payments/{paymentId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwner(userId);
+        allow write: if false;
       }
     }
 
-    // Health check collection for connection testing
     match /test/{docId} {
       allow read: if true;
+      allow write: if false;
     }
   }
 }
