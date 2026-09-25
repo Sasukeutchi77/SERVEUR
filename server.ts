@@ -1,3 +1,4 @@
+import "dotenv/config";
 import express from "express";
 import path from "path";
 import fs from "fs";
@@ -5,9 +6,47 @@ import { createServer as createViteServer } from "vite";
 import type { ArchitectureComponentStatus, RuntimeConfig } from "./shared/types/index.ts";
 
 const PORT = Number.parseInt(process.env.PORT ?? "3000", 10);
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65535) {
+  throw new Error("PORT doit être un nombre compris entre 1 et 65535");
+}
+
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "1mb" }));
+app.set("trust proxy", process.env.TRUST_PROXY === "true" ? 1 : false);
+app.use(express.json({ limit: "1mb", strict: true }));
+
+// Baseline security headers without trusting a client-provided origin.
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  if (process.env.NODE_ENV === "production") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
+// Small in-process limiter for the standalone deployment. Use Redis/API-gateway
+// limiting as well when running multiple instances.
+const requestBuckets = new Map<string, { count: number; resetAt: number }>();
+const RATE_WINDOW_MS = 60_000;
+const RATE_LIMIT = 120;
+app.use((req, res, next) => {
+  const now = Date.now();
+  const key = req.ip || "unknown";
+  const bucket = requestBuckets.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    requestBuckets.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return next();
+  }
+  bucket.count += 1;
+  if (bucket.count > RATE_LIMIT) {
+    res.setHeader("Retry-After", Math.ceil((bucket.resetAt - now) / 1000));
+    return res.status(429).json({ success: false, error: "Trop de requêtes. Réessayez plus tard." });
+  }
+  next();
+});
 
 const SUPPORTED_RUNTIMES_LIST: RuntimeConfig[] = [
   { id: "nodejs-22", label: "Node.js 22 (LTS)", family: "nodejs", version: "22.x", defaultInstallCommand: "npm install --production", defaultStartCommand: "npm start", detectionFiles: ["package.json", "package-lock.json"], dockerImage: "node:22-alpine", description: "Environnement Node.js isolé.", categoryBadge: "LTS" },
@@ -35,17 +74,20 @@ app.get("/api/v1/system/overview", (_req, res) => res.json({ platformName: "BotC
 app.get("/api/v1/runtimes", (_req, res) => res.json({ runtimes: SUPPORTED_RUNTIMES_LIST }));
 app.get("/api/v1/billing/plans", (_req, res) => res.json({ success: true, currency: "CFA", periodDays: 30, plans: VPS_PLANS }));
 
-// Fail closed: accepting a user-provided balance or SMS text is not payment verification.
-// Configure a real provider webhook/API before enabling paid allocation.
 const paymentProvider = process.env.PAYMENT_PROVIDER?.trim().toLowerCase() ?? "disabled";
 const paidBillingEnabled = paymentProvider !== "disabled" && Boolean(process.env.PAYMENT_PROVIDER_API_KEY);
-const paymentUnavailable = (_req: express.Request, res: express.Response) => res.status(503).json({ success: false, error: "Paiement temporairement indisponible : aucun fournisseur de paiement vérifiable n'est configuré." });
-
+const paymentUnavailable = (_req: express.Request, res: express.Response) => res.status(503).json({ success: false, error: paidBillingEnabled ? "Le fournisseur de paiement doit être intégré et vérifié côté serveur." : "Paiement temporairement indisponible : aucun fournisseur de paiement vérifiable n'est configuré." });
 app.post("/api/v1/billing/verify-payment", paymentUnavailable);
 app.post("/api/v1/billing/checkout", paymentUnavailable);
 app.post("/api/v1/billing/renew", paymentUnavailable);
 
 app.post("/api/v1/test/phase1", (_req, res) => res.json({ success: true, phase: 1, totalTests: 1, passed: 1, tests: [{ name: "Billing fail-closed", status: paidBillingEnabled ? "PASS" : "BLOCKED", details: paidBillingEnabled ? "Provider configuré; intégration à tester." : "Aucun paiement simulé accepté." }], timestamp: new Date().toISOString() }));
+
+// Never leak stack traces or internal errors to clients.
+app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error("[BotCloud] Erreur API", error);
+  res.status(500).json({ success: false, error: "Erreur interne du serveur." });
+});
 
 async function startServer() {
   const isProduction = process.env.NODE_ENV === "production" || (typeof __filename !== "undefined" && __filename.includes("dist"));
@@ -55,7 +97,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     if (fs.existsSync(path.join(distPath, "index.html"))) {
-      app.use(express.static(distPath));
+      app.use(express.static(distPath, { dotfiles: "deny", index: "index.html" }));
       app.get("*", (_req, res) => res.sendFile(path.join(distPath, "index.html")));
     } else {
       app.get("*", (_req, res) => res.status(503).send("Application non compilée. Exécutez npm run build."));
